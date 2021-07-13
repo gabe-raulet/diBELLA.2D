@@ -10,24 +10,13 @@
 #include "CC.h"
 
 // #define MATRIXPOWER
-#define APSP
+#define APSPDEF
 #define MAXPATHLEN 5000
 
-#ifdef APSP // All-Pairs Shortest Path (not great for big graphs, I wanna use Seidel's algorithm but modify it for sparse matrices)
+#ifdef APSPDEF // All-Pairs Shortest Path (not great for big graphs, I wanna use Seidel's algorithm but modify it for sparse matrices)
 
-#include <boost/numeric/ublas/matrix_sparse.hpp>
-#include <boost/numeric/ublas/io.hpp>
 #include <algorithm>
-
-using namespace boost::numeric::ublas;
 #define INF 10000
-
-typedef struct
-{
-    int len;
-    int dir; // I can use short (not ushort, -1 is undefined)
-    std::string seq;
-} Overlap;
 
 void toBinary(ushort n, int* arr) 
 { 
@@ -82,34 +71,33 @@ bool isDirOk(int dir1, int dir2, int& dir)
     else return false;
 }
 
-void PrintAPSP(mapped_matrix<Overlap>& D, int nvertex)
+void PrintAPSP(ContigMatType& D, int nvertex)
 {
-    for (unsigned i = 0; i < D.size1(); ++i)
-        for (unsigned j = 0; j < D.size2(); ++j)
+    for (unsigned i = 0; i < nvertex; ++i)
+        for (unsigned j = 0; j < nvertex; ++j)
         {
-            Overlap entry = D(i, j);
+            Overlap entry = D[i][j];
 
             if(entry.len == INF) printf("%7s\t", "INF");
-            else printf("%s\t", entry.seq.c_str());
-            // else printf("%7d\t", entry.len);
+            else printf("%s\t", entry.seq.c_str()); // else printf("%7d\t", entry.len);
 
             if(j == nvertex - 1) printf("\n");
         }
     printf("\n");
 }
 
-void APSP(mapped_matrix<Overlap>& S, int nvertex, int nnz)
+void APSP(ContigMatType& CustomS, int nvertex, int nnz) // , 
 {
-    mapped_matrix<Overlap> D(S); // the distances matrix (copy constructor)
+    ContigMatType D = CustomS; // the distances matrix (copy constructor)
     unsigned i, j, k;
  
     for (k = 0; k < nvertex; k++)
         for (i = 0; i < nvertex; i++)
             for (j = 0; j < nvertex; j++)
             {
-                Overlap ij = D(i, j);
-                Overlap kj = D(k, j);
-                Overlap ik = D(i, k);
+                Overlap ij = D[i][j];
+                Overlap kj = D[k][j];
+                Overlap ik = D[i][k];
 
                 // The direction check is very simple right now, the bidirectional one hasn't been integrated/tested yet
                 if((ij.len > (ik.len + kj.len)) & isDirOk(ik.dir, kj.dir, ij.dir))
@@ -118,16 +106,15 @@ void APSP(mapped_matrix<Overlap>& S, int nvertex, int nnz)
                     ij.seq = ik.seq + kj.seq;
                 }
 
-                D(i, j) = ij;
+                D[i][j] = ij;
             }
-    PrintAPSP(D, nvertex);
+    // PrintAPSP(D, nvertex);
 }
 
 #endif
 
 /*! Namespace declarations */
 using namespace combblas;
-// typedef ContigSRing <dibella::CommonKmers, dibella::CommonKmers, dibella::CommonKmers> ContigSRing_t;
 
 std::vector<std::string> 
 CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput, TraceUtils tu, 
@@ -161,15 +148,16 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
     HistCC(myLabelCC, nCC);
 
 // GGGG: This must be executed sequentially for now (prototyping on E. coli CCS single node)
-#ifdef APSP
+#ifdef APSPDEF
 
-    // 1) From CombBLAS to Boost matrix format
-
-    int nvertex = nreads;
-    // int nnz = S.getnnz();
-
-    // The string matrix boostS
-    mapped_matrix<Overlap> boostS(nvertex, nvertex, nnz); // This is not compressed (I need to modify Seidel's to get a sparse version)
+    // The string matrix using vec of vec there's a better way to do this using sparsity
+    ContigMatType CustomS;
+    
+    CustomS.resize(nreads);
+    for(int i = 0; i < nreads; i++)
+    {
+        CustomS[i].resize(nreads);
+    }
 
     // Local sequences (entire dataset since it's sequential for now)
 	uint64_t z = 0;
@@ -189,6 +177,7 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
             // I wanna extract the direction from here and the compute the string which is not currently stored there because CombBLAS doesn't like string)
             // To get the string I need direction, start/end position
 			dibella::CommonKmers* cks = &(dcsc->numx[j]);
+            
             int dir = cks->overhang & 3;
             std::get<2>(mattuples[z]) = dir;
 
@@ -196,11 +185,11 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
             seqan::Dna5String seqH = *(dfd->row_seq(dcsc->ir[j])); // extract row sequence
             seqan::Dna5String seqV = *(dfd->row_seq(dcsc->jc[i])); // extract col sequence
 
-            seqan::Dna5String overlap_suffix;
+            seqan::Dna5String contigsubstr;
 
             // These should have already been updated according to overhang/overhangT during TR
-            ushort begpV = cks->first.first;  // Updated post-alignment, need to update in TR semiring when transposing
-			ushort begpH = cks->first.second; // Check correctness of H/V
+            ushort begpV = cks->first.first;  
+			ushort begpH = cks->first.second; 
 
             ushort endpV = cks->first.second;  // Updated post-alignment, need to update in TR semiring when transposing
 			ushort endpH = cks->second.second; // Check correctness of H/V
@@ -217,7 +206,7 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 
 					// suffix = rlenV - endpV;
                 	// suffix = seqV.substr(endpV, length(seqV)); 
-                    overlap_suffix = seqan::suffix(seqV, endpV); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+                    contigsubstr = seqan::suffix(seqV, endpV); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
 				}	
 				else
 				{
@@ -225,7 +214,7 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 
 					// suffix  = rlenH - endpH;
 					// suffix = seqH.substr(endpH, length(seqH)); 
-                    overlap_suffix = seqan::suffix(seqH, endpH); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+                    contigsubstr = seqan::suffix(seqH, endpH); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
 
 				} 
 			}
@@ -238,9 +227,9 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 					// suffix = begpV;
 					// suffix = seqV.substr(0, begpV); 
                     // >----> <----<, I want to get the reverse complement of this substring because seqV is on the reverse strand in this case
-                    overlap_suffix = seqan::prefix(seqV, begpV+1); // The 2nd par is excluding end position
+                    contigsubstr = seqan::prefix(seqV, begpV+1); // The 2nd par is excluding end position
                     
-                    // RevComplement(overlap_suffix); // Declare this function!
+                    // RevComplement(contigsubstr); // Declare this function!
 				}
 				else
 				{
@@ -249,11 +238,11 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 					// suffix  = rlenV - endpV;	
                     // suffix = seqV.substr(endpV,  length(seqV)); 
                     // <----< >---->, I don't want get the reverse complement of this substring because seqV is on the fwd strand in this case
-                    overlap_suffix = seqan::suffix(seqV, endpV);
+                    contigsubstr = seqan::suffix(seqV, endpV);
 				}
 			}
 
-            std::get<3>(mattuples[z]) = overlap_suffix; // Everything should technically be consistent, if correct
+            std::get<3>(mattuples[z]) = contigsubstr; // Everything should technically be consistent, if correct
 			++z;
 		}
 	}
@@ -261,37 +250,24 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 	assert(z == nnz);
 	std::cout << "Local nnz count: " << nnz << std::endl;
 
-    // for (uint64_t i = 0; i < dcsc->nz; ++i)
-	// {
-    //     int64_t lrid = dcsc->ir[i]; // local row idx
-    //     seqan::Dna5String rseq = *(dfd->row_seq(lrid)); // extract row sequence
-    // }
-
-    // The entire matrix boostS is initialized to INF with 0 on the diagonal
-    for (unsigned i = 0; i < boostS.size1(); ++i)
-        for (unsigned j = 0; j < boostS.size2(); ++j)
+    // The entire matrix S is initialized to INF with 0 on the diagonal
+    for (unsigned i = 0; i < nreads; ++i)
+        for (unsigned j = 0; j < nreads; ++j)
         {
             Overlap entry;
-            entry.seq = "";
 
+            entry.seq = "";
             entry.dir = -1; // if INF (zeros) direction must be "indefined", 0 is a direction in our bidirected graph
 
             if(i != j) entry.len = INF;
             else entry.len = 0; // this is important dude (zeros on the diagonal must be actual zeros) ---Question how do I modify this for sparsity?
 
-            boostS(i, j) = entry;
+            CustomS[i][j] = entry;
         }
-    
-    // PrintAPSP(boostS, nvertex);
-
-    // 2) I need to add substring to the nonzero
-    // The matrix boostS stores the nonzeros plus the substring suffix
-
-    // PrintAPSP(boostS, nvertex);
-      
+     
     // 3) APSP (inefficient for big matrix but let's see if contig makes sense first)
-    // PrintAPSP(S, nvertex);
-    // APSP(S, nvertex, nnz);
+    PrintAPSP(CustomS, nreads);
+    APSP(CustomS,nreads, nnz); //
 
 #endif
 
