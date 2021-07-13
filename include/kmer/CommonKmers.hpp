@@ -80,70 +80,68 @@ namespace dibella {
 		else return false;
 	}
 
-	// Used in SR.hpp fo MinPlus
-	// friend bool operator<(const CommonKmers& lhs, const CommonKmers& rhs)
-	// {
-	// 	ushort len1 = lhs.overhang >> 2;
-	// 	ushort len2 = rhs.overhang >> 2;
+	friend bool operator<(const CommonKmers& lhs, const CommonKmers& rhs)
+	{
+		ushort len1 = lhs.overhang >> 2;
+		ushort len2 = rhs.overhang >> 2;
 
-	// 	if(len1 < len2) return true;
-	// 	else return false;
-	// }
+		if(len1 < len2) return true;
+		else return false;
+	}
 
-	// Used in SR.hpp fo MinPlus
-	// friend CommonKmers operator+(const CommonKmers& lhs, const CommonKmers& rhs)
-	// {
-	// 	CommonKmers me;
+	friend CommonKmers operator+(const CommonKmers& lhs, const CommonKmers& rhs)
+	{
+		CommonKmers me;
 
-	// 	ushort dir;
+		ushort dir;
 
-	// 	int mybin1[2] = {0, 0};
-	// 	int mybin2[2] = {0, 0};
+		int mybin1[2] = {0, 0};
+		int mybin2[2] = {0, 0};
 
-	// 	if((lhs.overhang & 3) != 0)
-	// 	{
-	// 		int nbit = 2;
-	// 		uint n = lhs.overhang & 3;
-	// 		for(int i = 0; i < nbit; i++)
-	// 		{ 
-	// 			mybin1[i] = n % 2; 
-	// 			n = n / 2; 
-	// 		}
-	// 	}
+		if((lhs.overhang & 3) != 0)
+		{
+			int nbit = 2;
+			uint n = lhs.overhang & 3;
+			for(int i = 0; i < nbit; i++)
+			{ 
+				mybin1[i] = n % 2; 
+				n = n / 2; 
+			}
+		}
 
-	// 	if((rhs.overhang & 3) != 0)
-	// 	{
-	// 		int nbit = 2;
-	// 		uint n = rhs.overhang & 3;
-	// 		for(int i = 0; i < nbit; i++)
-	// 		{ 
-	// 			mybin2[i] = n % 2; 
-	// 			n = n / 2; 
-	// 		}
-	// 	}
+		if((rhs.overhang & 3) != 0)
+		{
+			int nbit = 2;
+			uint n = rhs.overhang & 3;
+			for(int i = 0; i < nbit; i++)
+			{ 
+				mybin2[i] = n % 2; 
+				n = n / 2; 
+			}
+		}
 
-	// 	ushort start = mybin1[1]; 
-	// 	ushort end   = mybin2[0]; 
+		ushort start = mybin1[1]; 
+		ushort end   = mybin2[0]; 
 
-	// 	if(start == 0)
-	// 	{
-	// 		if(end == 0) dir = 0;
-	// 		else dir = 1;
-	// 	}
-	// 	else
-	// 	{
-	// 		if(end == 0) dir = 2;
-	// 		else dir = 3;      
-	// 	}
+		if(start == 0)
+		{
+			if(end == 0) dir = 0;
+			else dir = 1;
+		}
+		else
+		{
+			if(end == 0) dir = 2;
+			else dir = 3;      
+		}
 
-	// 	ushort len1 = lhs.overhang >> 2;
-	// 	ushort len2 = rhs.overhang >> 2;
+		ushort len1 = lhs.overhang >> 2;
+		ushort len2 = rhs.overhang >> 2;
 
-	// 	len1 += len2;
+		len1 += len2;
 
-	// 	me.overhang = len1 << 2 | dir;
-	// 	return me;
-	// }
+		me.overhang = len1 << 2 | dir;
+		return me;
+	}
 
     friend std::ostream &operator<<(std::ostream &os, const CommonKmers &m)
 	{

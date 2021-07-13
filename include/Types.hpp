@@ -18,6 +18,8 @@ typedef std::chrono::high_resolution_clock hrc_t;
 typedef seqan::Seed<seqan::Simple> TSeed;
 typedef seqan::Score<int, seqan::Simple> ScoringScheme;
 
+typedef std::vector<std::tuple<uint, uint, int, seqan::Dna5String>> VecTupType; // row idx, col idx, direction, suffix string (can get the length from this)
+
 typedef unsigned short ushort;
 typedef unsigned char uchar;
 typedef std::vector<uint64_t> uvec_64;

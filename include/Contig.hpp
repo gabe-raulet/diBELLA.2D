@@ -10,7 +10,120 @@
 #include "CC.h"
 
 // #define MATRIXPOWER
+#define APSP
 #define MAXPATHLEN 5000
+
+#ifdef APSP // All-Pairs Shortest Path (not great for big graphs, I wanna use Seidel's algorithm but modify it for sparse matrices)
+
+#include <boost/numeric/ublas/matrix_sparse.hpp>
+#include <boost/numeric/ublas/io.hpp>
+#include <algorithm>
+
+using namespace boost::numeric::ublas;
+#define INF 10000
+
+typedef struct
+{
+    int len;
+    int dir; // I can use short (not ushort, -1 is undefined)
+    std::string seq;
+} Overlap;
+
+void toBinary(ushort n, int* arr) 
+{ 
+    int nbit = 2;
+    for(int i = 0; i < nbit; i++)
+    { 
+        arr[i] = n % 2; 
+        n = n / 2; 
+    }
+}
+
+// If false, dir (ij.dir) isn't modified
+bool DirectionalityCheck(int dir1, int dir2, int& dir)
+{
+    int rbit, lbit;
+    int start, end;
+
+    int mybin1[2] = {0, 0}; // 0 1
+    int mybin2[2] = {0, 0}; // 0 0
+
+    if(dir1 != 0) toBinary(dir1, mybin1);
+    if(dir2 != 0) toBinary(dir2, mybin2);
+
+    rbit = mybin1[0]; // 1 
+    lbit = mybin2[1]; // 0
+
+    if(rbit != lbit)
+    {
+        start = mybin1[1]; // 11
+        end   = mybin2[0]; // 00
+
+        if(start == 0)
+        {
+            if(end == 0) dir = 0;
+            else dir = 1;
+        }
+        else
+        {
+            if(end == 0) dir = 2;
+            else dir = 3;      
+        }
+
+        return true;
+    }
+    else return false;
+}
+
+// If one of the two is INF, the condition ij > ik + kj is not gonna be satified
+bool isDirOk(int dir1, int dir2, int& dir)
+{
+    if(DirectionalityCheck(dir1, dir2, dir)) return true;
+    else return false;
+}
+
+void PrintAPSP(mapped_matrix<Overlap>& D, int nvertex)
+{
+    for (unsigned i = 0; i < D.size1(); ++i)
+        for (unsigned j = 0; j < D.size2(); ++j)
+        {
+            Overlap entry = D(i, j);
+
+            if(entry.len == INF) printf("%7s\t", "INF");
+            else printf("%s\t", entry.seq.c_str());
+            // else printf("%7d\t", entry.len);
+
+            if(j == nvertex - 1) printf("\n");
+        }
+    printf("\n");
+}
+
+void APSP(mapped_matrix<Overlap>& S, int nvertex, int nnz)
+{
+    mapped_matrix<Overlap> D(S); // the distances matrix (copy constructor)
+    unsigned i, j, k;
+ 
+    for (k = 0; k < nvertex; k++)
+        for (i = 0; i < nvertex; i++)
+            for (j = 0; j < nvertex; j++)
+            {
+                Overlap ij = D(i, j);
+                Overlap kj = D(k, j);
+                Overlap ik = D(i, k);
+
+                // The direction check is very simple right now, the bidirectional one hasn't been integrated/tested yet
+                if((ij.len > (ik.len + kj.len)) & isDirOk(ik.dir, kj.dir, ij.dir))
+                {
+                    ij.len = ik.len + kj.len;
+                    ij.seq = ik.seq + kj.seq;
+                }
+
+                D(i, j) = ij;
+            }
+    PrintAPSP(D, nvertex);
+}
+
+#endif
 
 /*! Namespace declarations */
 using namespace combblas;
@@ -47,7 +160,130 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
     First4Clust(myLabelCC);
     HistCC(myLabelCC, nCC);
 
-    // PrintCC(myLabelCC, nCC);
+// GGGG: This must be executed sequentially for now (prototyping on E. coli CCS single node)
+#ifdef APSP
+
+    // 1) From CombBLAS to Boost matrix format
+
+    int nvertex = nreads;
+    int nnz = S.getnnz();
+
+    // The string matrix boostS
+    mapped_matrix<Overlap> boostS(nvertex, nvertex, nnz); // This is not compressed (I need to modify Seidel's to get a sparse version)
+
+    // Local sequences (entire dataset since it's sequential for now)
+	uint64_t z = 0;
+	auto dcsc = spSeq->GetDCSC();
+
+    // I wanna have a vector of tuples <row idx, col idx, direction, len, suffix> to fill my boostS matrix
+    VecTupType mattuples(nnz); // nnz in the vector
+
+	for (uint64_t i = 0; i < dcsc->nzc; ++i)
+	{
+		for (uint64_t j = dcsc->cp[i]; j < dcsc->cp[i+1]; ++j)
+		{
+			std::get<0>(mattuples[z]) = dcsc->ir[j]; // row idx
+			std::get<1>(mattuples[z]) = dcsc->jc[i]; // col idx
+
+            // This is the nonzero, meaning CommonKmers
+            // I wanna extract the direction from here and the compute the string which is not currently stored there because CombBLAS doesn't like string)
+            // To get the string I need direction, start/end position
+			CommonKmer ckentry = &(dcsc->numx[j]);
+            int dir = ckentry.overhang & 3;
+            std::get<2>(mattuples[z]) = dir;
+
+            // Get row/col sequences paying attention to the consistency of V/H
+            seqan::Dna5String seqH = *(dfd->row_seq(dcsc->ir[j])); // extract row sequence
+            seqan::Dna5String seqV = *(dfd->row_seq(dcsc->jc[i])); // extract col sequence
+
+            seqan::Dna5String suffix;
+
+            // These should have already been updated according to overhang/overhangT during TR
+            ushort begpV = cks->first.first;  // Updated post-alignment, need to update in TR semiring when transposing
+			ushort begpH = cks->first.second; // Check correctness of H/V
+
+            // Get suffix substring
+			if(dir == 1 || dir == 2) // !reverse complement
+			{
+				if(begpH > begpV)
+				{
+					assert(dir == 1);
+
+					// suffix = rlenV - endpV;
+					suffix = seqV.substr(endpV, seqV.length()); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+				}	
+				else
+				{
+                    assert(dir == 2);
+
+					// suffix  = rlenH - endpH;
+					suffix = seqH.substr(endpH, seqH.length()); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+
+				} 
+			}
+			else
+			{
+				if((begpV > 0) & (begpH > 0) & (rlenV-endpV == 0) & (rlenV-endpV == 0))
+				{
+					assert(dir == 0);
+
+					// suffix = begpV;
+					suffix = seqV.substr(0, begpV); 
+                    // >----> <----<, I want to get the reverse complement of this substring because seqV is on the reverse strand in this case
+                    
+                    RevComplement(suffix); // Declare this function!
+				}
+				else
+				{
+					assert(dir == 3);
+
+					// suffix  = rlenV - endpV;	
+                    suffix = seqV.substr(endpV, seqV.length()); 
+                    // <----< >---->, I don't want get the reverse complement of this substring because seqV is on the fwd strand in this case
+				}
+			}
+
+            std::get<2>(mattuples[z]) = suffix; // Everything should technically be consistent, if correct!
+			++z;
+		}
+	}
+
+	assert(z == nnz);
+	std::cout << "Local nnz count: " << nnz << std::endl;
+
+    // for (uint64_t i = 0; i < dcsc->nz; ++i)
+	// {
+    //     int64_t lrid = dcsc->ir[i]; // local row idx
+    //     seqan::Dna5String rseq = *(dfd->row_seq(lrid)); // extract row sequence
+    // }
+
+    // The entire matrix boostS is initialized to INF with 0 on the diagonal
+    for (unsigned i = 0; i < boostS.size1(); ++i)
+        for (unsigned j = 0; j < boostS.size2(); ++j)
+        {
+            Overlap entry;
+            entry.seq = "";
+
+            entry.dir = -1; // if INF (zeros) direction must be "indefined", 0 is a direction in our bidirected graph
+
+            if(i != j) entry.len = INF;
+            else entry.len = 0; // this is important dude (zeros on the diagonal must be actual zeros) ---Question how do I modify this for sparsity?
+
+            boostS(i, j) = entry;
+        }
+    
+    // PrintAPSP(boostS, nvertex);
+
+    // 2) I need to add substring to the nonzero
+    // The matrix boostS stores the nonzeros plus the substring suffix
+
+    // PrintAPSP(boostS, nvertex);
+      
+    // 3) APSP (inefficient for big matrix but let's see if contig makes sense first)
+    // PrintAPSP(S, nvertex);
+    // APSP(S, nvertex, nnz);
+
+#endif
 
 #ifdef MATRIXPOWER
 
