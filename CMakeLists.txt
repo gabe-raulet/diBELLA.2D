@@ -82,10 +82,10 @@ add_executable(dibella
         include/Contig.hpp
 	)
 
-set(LOWER_KMER_FREQ 20
+set(LOWER_KMER_FREQ 2
     CACHE STRING "Lower bound for the k-mer frequency")
 
-set(UPPER_KMER_FREQ 30
+set(UPPER_KMER_FREQ 10
     CACHE STRING "Upper bound for the k-mer frequency")
 
 set(MAX_KMER_SIZE 32

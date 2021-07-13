@@ -166,7 +166,7 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
     // 1) From CombBLAS to Boost matrix format
 
     int nvertex = nreads;
-    int nnz = S.getnnz();
+    // int nnz = S.getnnz();
 
     // The string matrix boostS
     mapped_matrix<Overlap> boostS(nvertex, nvertex, nnz); // This is not compressed (I need to modify Seidel's to get a sparse version)
@@ -188,19 +188,25 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
             // This is the nonzero, meaning CommonKmers
             // I wanna extract the direction from here and the compute the string which is not currently stored there because CombBLAS doesn't like string)
             // To get the string I need direction, start/end position
-			CommonKmer ckentry = &(dcsc->numx[j]);
-            int dir = ckentry.overhang & 3;
+			dibella::CommonKmers* cks = &(dcsc->numx[j]);
+            int dir = cks->overhang & 3;
             std::get<2>(mattuples[z]) = dir;
 
             // Get row/col sequences paying attention to the consistency of V/H
             seqan::Dna5String seqH = *(dfd->row_seq(dcsc->ir[j])); // extract row sequence
             seqan::Dna5String seqV = *(dfd->row_seq(dcsc->jc[i])); // extract col sequence
 
-            seqan::Dna5String suffix;
+            seqan::Dna5String overlap_suffix;
 
             // These should have already been updated according to overhang/overhangT during TR
             ushort begpV = cks->first.first;  // Updated post-alignment, need to update in TR semiring when transposing
 			ushort begpH = cks->first.second; // Check correctness of H/V
+
+            ushort endpV = cks->first.second;  // Updated post-alignment, need to update in TR semiring when transposing
+			ushort endpH = cks->second.second; // Check correctness of H/V
+
+            uint rlenV = length(seqV);
+            uint rlenH = length(seqH);
 
             // Get suffix substring
 			if(dir == 1 || dir == 2) // !reverse complement
@@ -210,40 +216,44 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 					assert(dir == 1);
 
 					// suffix = rlenV - endpV;
-					suffix = seqV.substr(endpV, seqV.length()); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+                	// suffix = seqV.substr(endpV, length(seqV)); 
+                    overlap_suffix = seqan::suffix(seqV, endpV); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
 				}	
 				else
 				{
                     assert(dir == 2);
 
 					// suffix  = rlenH - endpH;
-					suffix = seqH.substr(endpH, seqH.length()); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+					// suffix = seqH.substr(endpH, length(seqH)); 
+                    overlap_suffix = seqan::suffix(seqH, endpH); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
 
 				} 
 			}
 			else
 			{
-				if((begpV > 0) & (begpH > 0) & (rlenV-endpV == 0) & (rlenV-endpV == 0))
+				if((begpV > 0) & (begpH > 0) & (rlenV-endpV == 0) & (rlenH-endpH == 0))
 				{
 					assert(dir == 0);
 
 					// suffix = begpV;
-					suffix = seqV.substr(0, begpV); 
+					// suffix = seqV.substr(0, begpV); 
                     // >----> <----<, I want to get the reverse complement of this substring because seqV is on the reverse strand in this case
+                    overlap_suffix = seqan::prefix(seqV, begpV+1); // The 2nd par is excluding end position
                     
-                    RevComplement(suffix); // Declare this function!
+                    // RevComplement(overlap_suffix); // Declare this function!
 				}
 				else
 				{
 					assert(dir == 3);
 
 					// suffix  = rlenV - endpV;	
-                    suffix = seqV.substr(endpV, seqV.length()); 
+                    // suffix = seqV.substr(endpV,  length(seqV)); 
                     // <----< >---->, I don't want get the reverse complement of this substring because seqV is on the fwd strand in this case
+                    overlap_suffix = seqan::suffix(seqV, endpV);
 				}
 			}
 
-            std::get<2>(mattuples[z]) = suffix; // Everything should technically be consistent, if correct!
+            std::get<3>(mattuples[z]) = overlap_suffix; // Everything should technically be consistent, if correct
 			++z;
 		}
 	}
