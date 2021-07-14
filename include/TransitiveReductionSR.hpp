@@ -247,20 +247,6 @@ struct OverhangTSRing : unary_function <T, OUT>
         xT.lenh = x.lenv;
         xT.lenv = x.lenh;
 
-        // @GGGG-TODO (update coordinates)
-
-        // int begH = x.first.first;
-        // int begV = x.second;
-
-        // int endH =
-        // int endV =
-
-        // xT.first.first   =
-        // xT.first.second  =
-
-        // xT.second.first  =
-        // xT.second.second =
-
         return xT;
     }
 };

@@ -14,7 +14,7 @@ typedef struct
 {
     int len;
     int dir; // I can use short (not ushort, -1 is undefined)
-    std::string seq;
+    seqan::Dna5String seq;
 } Overlap;
 
 typedef std::chrono::duration<double, std::milli> ms_t;

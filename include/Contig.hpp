@@ -64,13 +64,6 @@ bool DirectionalityCheck(int dir1, int dir2, int& dir)
     else return false;
 }
 
-// If one of the two is INF, the condition ij > ik + kj is not gonna be satified
-bool isDirOk(int dir1, int dir2, int& dir)
-{
-    if(DirectionalityCheck(dir1, dir2, dir)) return true;
-    else return false;
-}
-
 void PrintAPSP(ContigMatType& D, int nvertex)
 {
     for (unsigned i = 0; i < nvertex; ++i)
@@ -79,14 +72,14 @@ void PrintAPSP(ContigMatType& D, int nvertex)
             Overlap entry = D[i][j];
 
             if(entry.len == INF) printf("%7s\t", "INF");
-            else printf("%s\t", entry.seq.c_str()); // else printf("%7d\t", entry.len);
+            else printf("%7d\t", entry.len); 
 
             if(j == nvertex - 1) printf("\n");
         }
     printf("\n");
 }
 
-void APSP(ContigMatType& CustomS, int nvertex, int nnz) // , 
+void APSP(ContigMatType& CustomS, int nvertex, int nnz) 
 {
     ContigMatType D = CustomS; // the distances matrix (copy constructor)
     unsigned i, j, k;
@@ -99,16 +92,24 @@ void APSP(ContigMatType& CustomS, int nvertex, int nnz) // ,
                 Overlap kj = D[k][j];
                 Overlap ik = D[i][k];
 
-                // The direction check is very simple right now, the bidirectional one hasn't been integrated/tested yet
-                if((ij.len > (ik.len + kj.len)) & isDirOk(ik.dir, kj.dir, ij.dir))
-                {
+                if((ij.len > (ik.len + kj.len)) && DirectionalityCheck(ik.dir, kj.dir, ij.dir))
+                {   
+                    /* Debug print */
+                    // std::cout << "(i, j) = (" << i << ", " << j << ")" << " | (i, k) = (" << i << ", " << k << ")" << " | (k, j) = (" << k << ", " << j << ")" << std::endl;
+                    // std::cout << "(i, j) = " << ij.dir << " | (i, k) = " << ik.dir << " | (k, j) = " << kj.dir << std::endl;
+                    // std::cout << std::endl;
+                    
                     ij.len = ik.len + kj.len;
-                    ij.seq = ik.seq + kj.seq;
+
+                    seqan::append(ik.seq, kj.seq);
+                    assert(ij.len == length(ik.seq));
+
+                    ij.seq = ik.seq; // + kj.seq;
                 }
 
                 D[i][j] = ij;
             }
-    // PrintAPSP(D, nvertex);
+    PrintAPSP(D, nvertex);
 }
 
 #endif
@@ -179,7 +180,7 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 			dibella::CommonKmers* cks = &(dcsc->numx[j]);
             
             int dir = cks->overhang & 3;
-            std::get<2>(mattuples[z]) = dir;
+            int overhang = cks->overhang >> 2;
 
             // Get row/col sequences paying attention to the consistency of V/H
             seqan::Dna5String seqH = *(dfd->row_seq(dcsc->ir[j])); // extract row sequence
@@ -187,63 +188,46 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 
             seqan::Dna5String contigsubstr;
 
-            // These should have already been updated according to overhang/overhangT during TR
-            ushort begpV = cks->first.first;  
-			ushort begpH = cks->first.second; 
-
-            ushort endpV = cks->first.second;  // Updated post-alignment, need to update in TR semiring when transposing
-			ushort endpH = cks->second.second; // Check correctness of H/V
+            /* Debug print */
+            // std::cout << dcsc->ir[j]+1 << " " << dcsc->jc[i]+1 << " " << dir << " " << overhang << std::endl;
 
             uint rlenV = length(seqV);
             uint rlenH = length(seqH);
 
-            // Get suffix substring
-			if(dir == 1 || dir == 2) // !reverse complement
-			{
-				if(begpH > begpV)
-				{
-					assert(dir == 1);
+            // Use case switch!
+            if (dir == 1)
+            {
+                int endpV = rlenV - overhang;
+                contigsubstr = seqan::suffix(seqV, endpV); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+            }
+            else if (dir == 2)
+            {
+                int endpH = rlenH - overhang;
+                contigsubstr = seqan::suffix(seqH, endpH); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
+            }
+            else if (dir == 0)
+            {
+                int begpV = overhang;
+                contigsubstr = seqan::prefix(seqV, begpV+1); // 2nd parameter excludes end position
+                seqan::Dna5StringReverseComplement twin(contigsubstr);
+                std::get<3>(mattuples[z]) = twin;
+            }
+            else if (dir == 3)
+            {
+                int endpV = rlenV - overhang;
+                contigsubstr = seqan::suffix(seqV, endpV);
+            }
+            
+            std::get<2>(mattuples[z]) = dir;
+            if(dir != 0) std::get<3>(mattuples[z]) = contigsubstr; // Everything should technically be consistent, if correct
 
-					// suffix = rlenV - endpV;
-                	// suffix = seqV.substr(endpV, length(seqV)); 
-                    contigsubstr = seqan::suffix(seqV, endpV); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
-				}	
-				else
-				{
-                    assert(dir == 2);
+            /* Debug print */
+            // std::cout << seqH << std::endl;
+            // std::cout << seqV << std::endl;
+            // std::cout << std::get<3>(mattuples[z]) << std::endl;
+            // std::cout << std::endl;
 
-					// suffix  = rlenH - endpH;
-					// suffix = seqH.substr(endpH, length(seqH)); 
-                    contigsubstr = seqan::suffix(seqH, endpH); // seqH entering in seqV so we extract the ending part of seqV (fwd strand)
-
-				} 
-			}
-			else
-			{
-				if((begpV > 0) & (begpH > 0) & (rlenV-endpV == 0) & (rlenH-endpH == 0))
-				{
-					assert(dir == 0);
-
-					// suffix = begpV;
-					// suffix = seqV.substr(0, begpV); 
-                    // >----> <----<, I want to get the reverse complement of this substring because seqV is on the reverse strand in this case
-                    contigsubstr = seqan::prefix(seqV, begpV+1); // The 2nd par is excluding end position
-                    
-                    // RevComplement(contigsubstr); // Declare this function!
-				}
-				else
-				{
-					assert(dir == 3);
-
-					// suffix  = rlenV - endpV;	
-                    // suffix = seqV.substr(endpV,  length(seqV)); 
-                    // <----< >---->, I don't want get the reverse complement of this substring because seqV is on the fwd strand in this case
-                    contigsubstr = seqan::suffix(seqV, endpV);
-				}
-			}
-
-            std::get<3>(mattuples[z]) = contigsubstr; // Everything should technically be consistent, if correct
-			++z;
+            ++z;
 		}
 	}
 
@@ -264,10 +248,29 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 
             CustomS[i][j] = entry;
         }
+
+    // The matrix stores the nonzeros
+    for(int z = 0; z < nnz; z++)
+    {
+        Overlap nnzentry;
+
+        uint i = std::get<0>(mattuples[z]);
+        uint j = std::get<1>(mattuples[z]);
+
+        assert(i != j);
+
+        nnzentry.dir = std::get<2>(mattuples[z]);
+        nnzentry.seq = std::get<3>(mattuples[z]);
+        nnzentry.len = length(nnzentry.seq);
+
+        CustomS[i][j] = nnzentry;        
+    }
      
     // 3) APSP (inefficient for big matrix but let's see if contig makes sense first)
     PrintAPSP(CustomS, nreads);
-    APSP(CustomS,nreads, nnz); //
+    APSP(CustomS,nreads, nnz); 
+    
+    printf("APSP is done!\n");
 
 #endif
 
