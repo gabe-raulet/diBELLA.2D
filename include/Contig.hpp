@@ -79,9 +79,8 @@ void PrintAPSP(ContigMatType& D, int nvertex)
     printf("\n");
 }
 
-void APSP(ContigMatType& CustomS, int nvertex, int nnz) 
+void APSP(ContigMatType& D, int nvertex, int nnz) 
 {
-    ContigMatType D = CustomS; // the distances matrix (copy constructor)
     unsigned i, j, k;
  
     for (k = 0; k < nvertex; k++)
@@ -109,7 +108,6 @@ void APSP(ContigMatType& CustomS, int nvertex, int nnz)
 
                 D[i][j] = ij;
             }
-    PrintAPSP(D, nvertex);
 }
 
 #endif
@@ -175,8 +173,7 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
 			std::get<1>(mattuples[z]) = dcsc->jc[i]; // col idx
 
             // This is the nonzero, meaning CommonKmers
-            // I wanna extract the direction from here and the compute the string which is not currently stored there because CombBLAS doesn't like string)
-            // To get the string I need direction, start/end position
+            // I wanna extract the direction from here and the compute the string which is not currently stored there
 			dibella::CommonKmers* cks = &(dcsc->numx[j]);
             
             int dir = cks->overhang & 3;
@@ -267,10 +264,42 @@ CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput,
     }
      
     // 3) APSP (inefficient for big matrix but let's see if contig makes sense first)
-    PrintAPSP(CustomS, nreads);
-    APSP(CustomS,nreads, nnz); 
+    // PrintAPSP(CustomS, nreads);
+
+    ContigMatType D = CustomS; // the distances matrix (copy constructor)
+    APSP(D, nreads, nnz); 
+
+    PrintAPSP(D, nreads);
     
     printf("APSP is done!\n");
+    printf("Printing (redundant) contig sequences to file in fasta format...\n");
+
+    std::ofstream ofs("contig.input.test.result.fa");
+
+    int nC = 0; // number of (redundant) contig sequences
+    // I can store only one strand (upper triangular) excluding diagonal
+    for (unsigned i = 0; i < (nreads-1); ++i)
+        for (unsigned j = (i+1); j < nreads; ++j)
+        {
+            Overlap ij = D[i][j];
+
+            if(ij.len != INF)
+            {
+                ofs << ">CONTIG|" << nC << std::endl;
+
+                // I need to append sequence i as prefix (not stored initially)
+                seqan::Dna5String contig = *(dfd->row_seq(i));
+                seqan::append(contig, ij.seq);
+
+                ofs << contig << std::endl;
+
+                nC++;
+            }    
+        }
+
+    std::cout << nC << " (redundant) contigs store in contig.input.test.result.fa" << std::endl;
+
+    // @GGGG-TODO-TONIGHT: Can I store each CC in a different matrix? If so then I can just pick the largest contig in the upper triangulat matrix (still computationally inefficient, tho)
 
 #endif
 
