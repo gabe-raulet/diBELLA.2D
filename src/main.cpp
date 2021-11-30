@@ -356,17 +356,18 @@ int main(int argc, char **argv)
   // CONTIG EXTRACTION                                                                // 
   //////////////////////////////////////////////////////////////////////////////////////
 
-  // tp->times["StartMain:ExtractContig()"] = std::chrono::system_clock::now();
+    tp->times["StartMain:ExtractContig()"] = std::chrono::system_clock::now();
 
-  // std::vector<std::string> myContigSet;
-  // bool contigging = true;
+    //std::vector<std::string> myContigSet;
+    bool contigging = true;
 
-  // if(contigging)
-  // {
-  //   myContigSet = CreateContig(B, myoutput, tu, B.seqptr(), dfd, seq_count);
-  // }
+    if(contigging)
+    {
+        CreateContig(B, myoutput, tu, B.seqptr(), dfd, seq_count);
+        //myContigSet = CreateContig(B, myoutput, tu, B.seqptr(), dfd, seq_count);
+    }
 
-  // tp->times["EndMain:ExtractContig()"] = std::chrono::system_clock::now();
+    tp->times["EndMain:ExtractContig()"] = std::chrono::system_clock::now();
 
   // //////////////////////////////////////////////////////////////////////////////////////
   // // SCAFFOLDING                                                                      // 
