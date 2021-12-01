@@ -367,7 +367,10 @@ int main(int argc, char **argv)
         std::cout << "global_read_count = " << global_read_count << ", global_start_idx = " << global_start_idx << std::endl;
     }
 
-    std::cout << "local_read_count = " << local_read_count << ", [myrank = " << myrank << "]" << std:::endl;
+    std::cout << "local_read_count = " << local_read_count << ", [myrank = " << myrank << "]" << std::endl;
+
+    seqan::Dna5String *rseq = dfd->row_seq(0);
+    std::cout << *rseq << "    [myrank = " << myrank << "]" << std::endl;
 
 
     //tp->times["StartMain:ExtractContig()"] = std::chrono::system_clock::now();
