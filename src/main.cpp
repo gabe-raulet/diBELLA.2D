@@ -356,22 +356,19 @@ int main(int argc, char **argv)
   // CONTIG EXTRACTION                                                                //
   //////////////////////////////////////////////////////////////////////////////////////
 
-    int global_read_count = dfd->global_count();
     int global_start_idx = dfd->global_start_idx();
 
     FastaData *local_fasta_data = dfd->lfd();
+    uint64_t start_offset, end_offset_inclusive;
+    ushort len;
 
-    int local_read_count = local_fasta_data->local_count();
+    char *stream = local_fasta_data->get_sequence(0, len, start_offset, end_offset_inclusive);
 
-    if (!myrank) {
-        std::cout << "global_read_count = " << global_read_count << ", global_start_idx = " << global_start_idx << std::endl;
-    }
+    char startstr[21];
+    strncpy(startstr, stream + start_offset, len);
+    startstr[20] = 0;
 
-    std::cout << "local_read_count = " << local_read_count << ", [myrank = " << myrank << "]" << std::endl;
-
-    seqan::Dna5String *rseq = dfd->row_seq(0);
-    std::cout << *rseq << "    [myrank = " << myrank << "]" << std::endl;
-
+    std::cout << "read num " << global_start_idx << " is length " << len << ", and the first 20 chars are " << startstr << std::endl;
 
     //tp->times["StartMain:ExtractContig()"] = std::chrono::system_clock::now();
 
