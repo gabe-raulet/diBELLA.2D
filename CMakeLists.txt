@@ -94,6 +94,8 @@ set(MAX_KMER_SIZE 32
 set(DELTACHERNOFF 0.1
     CACHE STRING "Delta Chernoff's bound")
 
+set(FUZZ 1000)
+
 target_compile_definitions(
   dibella
   PRIVATE
@@ -101,6 +103,7 @@ target_compile_definitions(
     -DDELTACHERNOFF=${DELTACHERNOFF}
     -DLOWER_KMER_FREQ=${LOWER_KMER_FREQ}
     -DUPPER_KMER_FREQ=${UPPER_KMER_FREQ}
+    -DFUZZ=${FUZZ}
 )
 
 target_link_libraries(dibella PUBLIC ZLIB::ZLIB CombBLAS GraphGenlib Usortlib MURMURHASH LIBBLOOM-NOUPC)
