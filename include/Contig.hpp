@@ -16,6 +16,25 @@
 /*! Namespace declarations */
 using namespace combblas;
 
+void ReadProcessorAssignment(FullyDistVec<int64_t, int64_t> *assignment, const FullyDistVec<int64_t, int64_t>& vCC, FullyDistVec<int64_t, int64_t>& ccSizes, int maxperproc)
+{
+    int nprocs, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    /* getting the ids of all contigs with at least 2 reads */
+    FullyDistVec<int64_t, int64_t> contigIds = ccSizes.FindInds(bind2nd(std::greater<int64_t>(), 1));
+
+    /* sort ccSizes */
+    /* starting from procecssor 0, count off reads from the largest
+     * contig until you are out of reads or you hit the maxperproc limit.
+     * Continue onto the next largest contig when you run out of reads, and
+     * continue onto the next process when you hit the maxperproc limit. Do this
+     * until you run out of contigs. Shouldn't run out of processors because
+     * maxperproc should be set to be larger than the number of reads divided by
+     * the number of processors */
+}
+
 
 void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput, TraceUtils tu, PSpMat<dibella::CommonKmers>::DCCols* spSeq, std::shared_ptr<DistributedFastaData> dfd, int64_t nreads)
 {
@@ -30,31 +49,35 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
     outs << "CreateContig::nonzeros: "    << nnz     << endl;
     SpParHelper::Print(outs.str());
 
-    std::shared_ptr<ParallelOps> parops = ParallelOps::init(NULL, NULL);
+    /* std::shared_ptr<ParallelOps> parops = ParallelOps::init(NULL, NULL); */
+    /* int myrank = parops->world_proc_rank; */
+    /* int nprocs = parops->world_procs_count; */
 
-    int myrank = parops->world_proc_rank;
-    int nprocs = parops->world_procs_count;
+    int nprocs, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
     std::shared_ptr<CommGrid> fullWorld = parops->grid;
 
-    
+
     /* boolean matrix for degree calculations */
-    PSpMat<bool>::MPI_DCCols D1(S.getcommgrid());    
+    PSpMat<bool>::MPI_DCCols D1(S.getcommgrid());
 
     /* cast overlap matrix nonzeros to 1, for degree calculation */
-    D1 = S; 
+    D1 = S;
 
     /* @degs1 is vector of degrees before branch adjacent edges are removed */
     FullyDistVec<int64_t, int64_t> degs1(D1.getcommgrid());
 
     D1.Reduce(degs1, Row, std::plus<int64_t>(), static_cast<int64_t>(0));
-    
+
     FullyDistVec<int64_t, int64_t> branches = degs1.FindInds(bind2nd(std::greater<int64_t>(), 2));
 
     /* delete branch adjacenct edges */
     S.PruneFull(branches, branches);
 
     /* boolean matrix for degree calculations, AFTER branch edge deletion */
-    PSpMat<bool>::MPI_DCCols D2(S.getcommgrid());    
+    PSpMat<bool>::MPI_DCCols D2(S.getcommgrid());
 
     D2 = S;
 
@@ -71,9 +94,9 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
 
     //PSpMat<bool>::MPI_DCCols CCMat(S.getcommgrid());
     //CCMat = S;
-    
+
     /* Calculate connected components */
-    int64_t nCC = 0;    
+    int64_t nCC = 0;
     FullyDistVec<int64_t, int64_t> vCC = CC(S, nCC);
 
     /* @LocalCCSizes will store the local counts for connected components, which will be used
@@ -108,7 +131,7 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
     /* Copy array into vector */
     std::vector<int64_t> fillvecCC(mylen);
     fillvecCC.assign(fillarrCC, fillarrCC + mylen);
-    
+
     FullyDistVec<int64_t, int64_t> ccSizes(fillvecCC, fullWorld);
 
     delete[] fillarrCC;
@@ -119,30 +142,32 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
 
     /* !!!! STARTING WITH nprocs == 1 !!!! */
 
-    /* contigs should have more than one read in them */
-    //FullyDistVec<int64_t, int64_t> contig_sizes = ccSizes.Find(bind2nd(std::greater<int64_t>(), 1));
-    FullyDistVec<int64_t, int64_t> contig_ids = ccSizes.FindInds(bind2nd(std::greater<int64_t>(), 1));
 
-    
+    /* ReadProcessorAssignment(); */
 
+    /* Once we have the read processor assignment (FillyDistVec<int64_t,
+     * int64_t> assignment (??)), then we call the proper MPI collective for
+     * distributing the reads, using DistributedFastaData and/or FastaData. Look
+     * at KmerOps for ideas about this sort of exchange. */
 
-    //contig_sizes.ParallelWrite("contig_sizes.txt", true);
-    //contig_ids.ParallelWrite("contig_ids.txt", true);
+    /* Once we have all the reads properly distributed, run contig assembly
+     * locally on each process. If an entire contig is on one process, then the
+     * entire contig will be assembled locally. If a contig happens to spill
+     * over, then we wait for all local assemblies to complete, and then rerun
+     * ReadProcessorAssignment (which maybe should be renamed then?) to get
+     * assignment of partially assembled contigs (treated as reads maybe?) to
+     * single processors */
 
-    //for (int i = 0; i < mylen; ++i) {
-    //    int ccsize = fillvecCC[i];
-    //    if (ccsize <= 1) continue;
-    //}
 }
 
 
 
 // typedef ContigSRing <dibella::CommonKmers, dibella::CommonKmers, dibella::CommonKmers> ContigSRing_t;
 
-// std::vector<std::string> 
-// CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput, TraceUtils tu, 
+// std::vector<std::string>
+// CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput, TraceUtils tu,
 //    PSpMat<dibella::CommonKmers>::DCCols* spSeq, std::shared_ptr<DistributedFastaData> dfd, int64_t nreads)
-// {    
+// {
 
    // float balance = S.LoadImbalance();
    // int64_t nnz   = S.getnnz();
@@ -176,7 +201,7 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
 
     // PSpMat<dibella::CommonKmers>::MPI_DCCols T = S; // (T) traversal matrix
     // PSpMat<dibella::CommonKmers>::MPI_DCCols ContigM(S.getcommgrid()); // Contig matrix
-    // dibella::CommonKmers defaultBVal; 
+    // dibella::CommonKmers defaultBVal;
 
     // Read vector is gonna multiply the matrix and create contig from there
     // FullyDistVec<int64_t, std::array<char, MAXCONTIGLEN>> ReadVector(S.getcommgrid());
@@ -185,8 +210,8 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
     // CustomVectorEntry nt;
     /*
      * A vector of read ids that is my path [0, 1, 3, 67] (paths)
-     * A vector of offset [10, 40, 50] (offsets) and offsets.size = paths.size -1 
-     * Offset 10 tells me that i have to cut the last 10 bases of read1 and concatenate them to read0, then 40 from read3 and concatenate them to read1 etc. 
+     * A vector of offset [10, 40, 50] (offsets) and offsets.size = paths.size -1
+     * Offset 10 tells me that i have to cut the last 10 bases of read1 and concatenate them to read0, then 40 from read3 and concatenate them to read1 etc.
     */
     // FullyDistVec<int64_t, char*> ReadVector(S.getcommgrid(), nreads, nt);
     //	auto dcsc = spSeq->GetDCSC();
@@ -206,7 +231,7 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
     //    crseq = &cpprseq[0]; // C++14
 
     //    std::cout << rseq << std::endl;
-    
+
     //   ReadVector.SetElement(lrid, crseq); // SetElement only work locally (owner)
     //	}
 
@@ -215,11 +240,11 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
     // FullyDistVec<int64_t, char*> ContigVector(S.getcommgrid());
 
     // do
-    // { 
+    // {
     //     // ContigSR concatenates entries
     //     ReadVector = ContigVector;
     //     ContigVector = SpMV<ContigSR>(S, ReadVector);
-                
+
     // } while (ReadVector != ContigVector); // Once the two vec are identical we're done
 
     // // GGGG: we know how long are the contig(s) from the CC so we could just extract those or can I use a FullySpDist vector and get only on contig?
