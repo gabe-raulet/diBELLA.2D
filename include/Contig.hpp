@@ -16,8 +16,10 @@
 /*! Namespace declarations */
 using namespace combblas;
 
+
 void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myoutput, TraceUtils tu, PSpMat<dibella::CommonKmers>::DCCols* spSeq, std::shared_ptr<DistributedFastaData> dfd, int64_t nreads)
 {
+
     float balance = S.LoadImbalance();
     int64_t nnz = S.getnnz();
 
@@ -34,6 +36,7 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
     int nprocs = parops->world_procs_count;
     std::shared_ptr<CommGrid> fullWorld = parops->grid;
 
+    
     /* boolean matrix for degree calculations */
     PSpMat<bool>::MPI_DCCols D1(S.getcommgrid());    
 
@@ -110,9 +113,26 @@ void CreateContig(PSpMat<dibella::CommonKmers>::MPI_DCCols& S, std::string& myou
 
     delete[] fillarrCC;
 
-    std::string stringm = myoutput;
-    stringm += ".reads.per.contig.txt";
-    ccSizes.ParallelWrite(stringm, true);
+    //std::string stringm = myoutput;
+    //stringm += ".reads.per.contig.txt";
+    //ccSizes.ParallelWrite(stringm, true);
+
+    /* !!!! STARTING WITH nprocs == 1 !!!! */
+
+    /* contigs should have more than one read in them */
+    //FullyDistVec<int64_t, int64_t> contig_sizes = ccSizes.Find(bind2nd(std::greater<int64_t>(), 1));
+    FullyDistVec<int64_t, int64_t> contig_ids = ccSizes.FindInds(bind2nd(std::greater<int64_t>(), 1));
+
+    
+
+
+    //contig_sizes.ParallelWrite("contig_sizes.txt", true);
+    //contig_ids.ParallelWrite("contig_ids.txt", true);
+
+    //for (int i = 0; i < mylen; ++i) {
+    //    int ccsize = fillvecCC[i];
+    //    if (ccsize <= 1) continue;
+    //}
 }
 
 

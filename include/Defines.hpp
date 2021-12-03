@@ -43,6 +43,15 @@ typedef unsigned long long int llu;
 #   define ASSERT(condition, message) do { } while (false)
 #endif
 
+#define ASSERT2(condition, message) \
+do { \
+    if (! (condition)) { \
+        std::cerr << "Assertion `" #condition "` failed in " << __FILE__ \
+                  << " line " << __LINE__ << ": " << message << std::endl; \
+        std::terminate(); \
+    } \
+} while (false)
+
 #ifndef __FILENAME__
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #endif

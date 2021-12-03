@@ -159,6 +159,8 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD,&nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD,&myrank);
 
+    ASSERT2(nprocs==1, "assume nprocs == 1 for now");
+
     if(myrank == 0)
     {
         std::cout << "Process Grid (p x p x t): " << sqrt(nprocs) << " x " << sqrt(nprocs) << " x " << nthreads << std::endl;
@@ -356,32 +358,18 @@ int main(int argc, char **argv)
   // CONTIG EXTRACTION                                                                //
   //////////////////////////////////////////////////////////////////////////////////////
 
-    int global_read_count = dfd->global_count();
-    int global_start_idx = dfd->global_start_idx();
+    tp->times["StartMain:ExtractContig()"] = std::chrono::system_clock::now();
 
-    FastaData *local_fasta_data = dfd->lfd();
+    //std::vector<std::string> myContigSet;
+    bool contigging = true;
 
-    int local_read_count = local_fasta_data->local_count();
-
-    if (!myrank) {
-        std::cout << "global_read_count = " << global_read_count << ", global_start_idx = " << global_start_idx << std::endl;
+    if(contigging)
+    {
+        CreateContig(B, myoutput, tu, B.seqptr(), dfd, seq_count);
+        //myContigSet = CreateContig(B, myoutput, tu, B.seqptr(), dfd, seq_count);
     }
 
-    std::cout << "local_read_count = " << local_read_count << ", [myrank = " << myrank << "]" << std:::endl;
-
-
-    //tp->times["StartMain:ExtractContig()"] = std::chrono::system_clock::now();
-
-    ////std::vector<std::string> myContigSet;
-    //bool contigging = true;
-
-    //if(contigging)
-    //{
-    //    CreateContig(B, myoutput, tu, B.seqptr(), dfd, seq_count);
-    //    //myContigSet = CreateContig(B, myoutput, tu, B.seqptr(), dfd, seq_count);
-    //}
-
-    //tp->times["EndMain:ExtractContig()"] = std::chrono::system_clock::now();
+    tp->times["EndMain:ExtractContig()"] = std::chrono::system_clock::now();
 
   // //////////////////////////////////////////////////////////////////////////////////////
   // // SCAFFOLDING                                                                      //
