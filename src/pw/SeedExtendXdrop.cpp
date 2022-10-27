@@ -146,29 +146,14 @@ void SeedExtendXdrop::apply(
 		ai.xscore  = extendSeed(seed, twinseqH, *seqV, seqan::EXTEND_BOTH, scoring_scheme, xdrop, (int)k, seqan::GappedXDrop());
 		end_time   = std::chrono::system_clock::now();
 		add_time("XA:ExtendSeed", (ms_t(end_time - start_time)).count());
-
-	#ifdef STATS
-		assignSource(row(align, 0), infix(twinseqH, beginPositionH(seed),
-										endPositionH(seed)));
-		assignSource(row(align, 1), infix(*seqV, beginPositionV(seed),
-										endPositionV(seed)));
-	#endif
-
 	}
-	else
+	else if (seedH == seedV)
 	{
 		ai.rc = false;
 		start_time = std::chrono::system_clock::now();
 		ai.xscore = extendSeed(seed, *seqH, *seqV, seqan::EXTEND_BOTH, scoring_scheme, xdrop, (int)k, seqan::GappedXDrop());
 		end_time = std::chrono::system_clock::now();
 		add_time("XA:ExtendSeed", (ms_t(end_time - start_time)).count());
-
-	#ifdef STATS
-		assignSource(row(align, 0), infix(*seqH, beginPositionH(seed),
-										endPositionH(seed)));
-		assignSource(row(align, 1), infix(*seqV, beginPositionV(seed),
-										endPositionV(seed)));
-	#endif
 	}
 
 	/*! Note. This aligns the extended seeds globally, NOT the original
@@ -179,18 +164,6 @@ void SeedExtendXdrop::apply(
 	* way to get the alignment info in SeqAn.
 	* See https://seqan.readthedocs.io/en/master/Tutorial/Algorithms/SeedExtension.html
 	*/
-#ifdef STATS
-    	start_time = std::chrono::system_clock::now();
-    	globalAlignment(align, scoring_scheme);
-    	end_time = std::chrono::system_clock::now();
-    	add_time("XA:global_alignment", (ms_t(end_time - start_time)).count());
-
-    	// Compute the statistics of the alignment.
-    	start_time = std::chrono::system_clock::now();
-    	computeAlignmentStats(ai[count].stats, align, scoring_scheme);
-    	end_time = std::chrono::system_clock::now();
-    	add_time("XA:ComputeStats", (ms_t(end_time - start_time)).count());
-#endif
 
     	ai.seq_h_length = length(*seqH); // col
     	ai.seq_v_length = length(*seqV); // row
@@ -204,22 +177,6 @@ void SeedExtendXdrop::apply(
     	ai.seq_v_g_idx = g_row_idx;
   }
 
-#ifdef STATS
-  if (seed_count > 2)
-  {
-    max_ai = ai[0].stats.alignmentIdentity > ai[1].stats.alignmentIdentity
-    ? ai[0] : ai[1];
-  }
-  double alen_minus_gapopens = (max_ai.stats.alignmentLength - max_ai.stats.numGapOpens) * 1.0;
-  ss << g_col_idx << "," << g_row_idx << "," << max_ai.stats.alignmentIdentity
-     << "," << max_ai.seq_h_length << "," << max_ai.seq_v_length
-     << "," << max_ai.seq_h_seed_length  << "," << max_ai.seq_v_seed_length
-     << "," << max_ai.stats.numGapOpens
-     << "," << alen_minus_gapopens / max_ai.seq_h_length
-     << "," << alen_minus_gapopens / max_ai.seq_v_length
-	 << "," << cks.count
-	 << std::endl;
-#endif
 }
 
 // @NOTE This is hard-coded to the number of seeds being <= 2
@@ -304,12 +261,12 @@ SeedExtendXdrop::apply_batch
 			seedV = infix(seqan::source(seqsv[i]), beginPositionV(seed), endPositionV(seed)); // seed on argA == row == seqV
 			seedH = infix(seqan::source(seqsh[i]), beginPositionH(seed), endPositionH(seed)); // seed on argB == col == seqH
 
-			seqan::Dna5StringReverseComplement twin(seedH);
+            int64_t h_idx = std::get<0>(mattuples[lids[i]]);
+            int64_t v_idx = std::get<1>(mattuples[lids[i]]);
 
-		#ifdef STATS
-			seqan::Align<seqan::Dna5String> align;
-			resize(rows(align), 2);
-		#endif
+            std::cout << "AA\t" << row_offset+h_idx+1 << "\t" << col_offset+v_idx+1 << "\t" << beginPositionV(seed) << "\t" << beginPositionH(seed) << std::endl;
+
+			seqan::Dna5StringReverseComplement twin(seedH);
 
 			if(twin == seedV)
 			{
@@ -339,14 +296,8 @@ SeedExtendXdrop::apply_batch
 					xscores[i] = 0;
 				}
 
-			#ifdef STATS
-				assignSource(row(align, 0), infix(twinRead, beginPositionH(seed),
-												endPositionH(seed)));
-				assignSource(row(align, 1), infix(*seqV, beginPositionV(seed),
-												endPositionV(seed)));
-			#endif
 			}
-			else
+			else if (seedH == seedV)
 			{
 				strands[i] = false;
 				if(!noAlign)
@@ -358,30 +309,17 @@ SeedExtendXdrop::apply_batch
 					end_time = std::chrono::system_clock::now();
 					add_time("XA:ExtendSeed", (ms_t(end_time - start_time)).count());
 
-				#ifdef STATS
-					assignSource(row(align, 0), infix(*seqH, beginPositionH(seed),
-													endPositionH(seed)));
-					assignSource(row(align, 1), infix(*seqV, beginPositionV(seed),
-													endPositionV(seed)));
-				#endif
 				}
 				else
 				{
 					xscores[i] = 0;
 				}
 			}
+            else
+            {
+                std::cout << "BB\t" << seedH << "\t" << seedV << std::endl;
+            }
 
-		#ifdef STATS
-			xscores[i] = extendSeed(seed, seqan::source(seqsh[i]), seqan::source(seqsv[i]),
-					   seqan::EXTEND_BOTH, scoring_scheme,
-					   xdrop, (int)k, seqan::GappedXDrop());
-			assignSource(seqsh_ex[i],
-						 infix(seqan::source(seqsh[i]),
-							   beginPositionH(seed), endPositionH(seed)));
-			assignSource(seqsv_ex[i],
-						 infix(seqan::source(seqsv[i]),
-							   beginPositionV(seed), endPositionV(seed)));
-		#endif
 			seeds[i] = seed;
 			seedlens[i].first  = static_cast<ushort>(seed._endPositionH -
 													 seed._beginPositionH);
@@ -392,14 +330,6 @@ SeedExtendXdrop::apply_batch
 		auto end_time = std::chrono::system_clock::now();
     	add_time("XA:ExtendSeed", (ms_t(end_time - start_time)).count());
 
-	#ifdef STATS
-		start_time = std::chrono::system_clock::now();
-		// alignment
-		globalAlignment(exec_policy, seqsh_ex, seqsv_ex, scoring_scheme);
-
-		end_time = std::chrono::system_clock::now();
-    	add_time("XA:global_alignment", (ms_t(end_time - start_time)).count());
-	#endif
 		start_time = std::chrono::system_clock::now();
 
 		// Compute stats
@@ -408,9 +338,6 @@ SeedExtendXdrop::apply_batch
 		#pragma omp parallel for
 			for (uint64_t i = 0; i < npairs; ++i)
 			{
-			#ifdef STATS
-				computeAlignmentStats(ai[i].stats, seqsh_ex[i], seqsv_ex[i], scoring_scheme);
-			#endif
 				ai[i].xscore = xscores[i];
 				ai[i].rc     = strands[i];
 				ai[i].seed   =   seeds[i];
@@ -431,19 +358,6 @@ SeedExtendXdrop::apply_batch
 		#pragma omp parallel for
 			for (uint64_t i = 0; i < npairs; ++i)
 			{
-
-			#ifdef STATS
-				seqan::AlignmentStats stats;
-				computeAlignmentStats(stats, seqsh_ex[i], seqsv_ex[i],
-									  scoring_scheme);
-
-				if (stats.alignmentIdentity > ai[i].stats.alignmentIdentity)
-				{
-					ai[i].stats				= stats;
-					ai[i].seq_h_seed_length = seedlens[i].first;
-					ai[i].seq_v_seed_length = seedlens[i].second;
-				}
-			#else
 				if (xscores[i] > ai[i].xscore) // GGGG: TODO double check this logic with fresh neurons
 				{
 					ai[i].xscore = xscores[i];
@@ -452,7 +366,6 @@ SeedExtendXdrop::apply_batch
 					ai[i].seq_h_seed_length = seedlens[i].first;
 					ai[i].seq_v_seed_length = seedlens[i].second;
 				}
-			#endif
 			}
 		}
 
