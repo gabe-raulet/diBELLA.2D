@@ -85,6 +85,9 @@ int subk_count = 0;
 std::string myoutput;
 int afreq;
 
+int ktip_threshold;
+bool prune_bridges = false;
+
 /*! Don't perform alignments if this flag is set */
 bool noAlign = false;
 
@@ -369,6 +372,9 @@ int parse_args(int argc, char **argv)
      cxxopts::value<int>())
     (CMD_OPTION_GAP_EXT, CMD_OPTION_DESCRIPTION_GAP_EXT,
      cxxopts::value<int>())
+    (CMD_OPTION_KTIP_THRESHOLD, CMD_OPTION_DESCRIPTION_KTIP_THRESHOLD,
+     cxxopts::value<int>())
+    (CMD_OPTION_PRUNE_BRIDGES, CMD_OPTION_DESCRIPTION_PRUNE_BRIDGES)
     (CMD_OPTION_KMER_LENGTH, CMD_OPTION_DESCRIPTION_KMER_LENGTH,
      cxxopts::value<int>())
     (CMD_OPTION_KMER_STRIDE, CMD_OPTION_DESCRIPTION_KMER_STRID,
@@ -459,6 +465,16 @@ int parse_args(int argc, char **argv)
     gap_ext = result[CMD_OPTION_GAP_EXT].as<int>();
   } else {
     gap_ext = -1;
+  }
+
+  if (result.count(CMD_OPTION_KTIP_THRESHOLD)) {
+    ktip_threshold = result[CMD_OPTION_KTIP_THRESHOLD].as<int>();
+  } else {
+    ktip_threshold = 0;
+  }
+
+  if (result.count(CMD_OPTION_PRUNE_BRIDGES)) {
+    prune_bridges = true;
   }
 
   if (result.count(CMD_OPTION_KMER_LENGTH)) {
@@ -553,7 +569,9 @@ void pretty_print_config(std::string &append_to) {
     "Full align (--fa)",
     "Xdrop align (--xa)",
     "Index map (--idxmap)",
-    "Alphabet (--alph)"
+    "Alphabet (--alph)",
+    "K-tip threshold (--tip)",
+    "Prune bridge vertices (--pb)"
   };
 
   std::vector<std::string> vals = {
@@ -574,7 +592,9 @@ void pretty_print_config(std::string &append_to) {
     bool_to_str(fullAlign),
     bool_to_str(xdropAlign)  + (xdropAlign  ? " | xdrop: " + std::to_string(xdrop) : ""),
     !idx_map_file.empty() ? idx_map_file : "None",
-    std::to_string(alph_t)
+    std::to_string(alph_t),
+    std::to_string(ktip_threshold),
+    bool_to_str(prune_bridges)
   };
 
   ushort max_length = 0;

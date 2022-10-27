@@ -20,6 +20,9 @@ typedef int64_t IType; /* index type used in this file */
 
 constexpr MPI_Count max_int = std::numeric_limits<int>::max();
 
+extern int ktip_threshold;
+extern bool prune_bridges;
+
 struct DistReadInfo
 {
 public:
@@ -354,7 +357,7 @@ IType KTipsRemoval(SpParMat<IType,IType,SpDCCols<IType,IType>>& A, const FullyDi
         /* For each column j in the F0 matrix, there is <= 1 row i for which F0(i,j) != 0. Let
          * C0(j) = -1 if F0(:,j) is all zeros, and otherwise let C0(j) = i where i is the row
          * for which F0(i,j) != 0. Do the same thing for the F1 matrix. The idea here is that
-         * if we hit a branch vertex in the F1 matrix, then the corresponding column of the 
+         * if we hit a branch vertex in the F1 matrix, then the corresponding column of the
          * F2 matrix will have more than one nonzero (which will be recorded by Tc) and then the
          * l-tip edge that we want to remove will have its source vertex in the F0 matrix and its
          * destination vertex in the F1 matrix. */
@@ -411,24 +414,30 @@ IType GetRead2Contigs(SpParMat<IType,ReadOverlap,SpDCCols<IType,ReadOverlap>>& G
 
     tu.print_str("GetRead2Contigs :: Calculated vertex degrees\n");
 
-    IType ktip_edges_removed;
-    do
+    if (ktip_threshold > 0)
     {
-        SpParMat<IType,bool,SpDCCols<IType,bool>> D1 = A;
-        FullyDistVec<IType,IType> degs1(A.getcommgrid());
-        D1.Reduce(degs1, Row, std::plus<IType>(), static_cast<IType>(0));
-        ktip_edges_removed = KTipsRemoval(A, degs1, 1, tu);
+        IType ktip_edges_removed;
+        do
+        {
+            SpParMat<IType,bool,SpDCCols<IType,bool>> D1 = A;
+            FullyDistVec<IType,IType> degs1(A.getcommgrid());
+            D1.Reduce(degs1, Row, std::plus<IType>(), static_cast<IType>(0));
+            ktip_edges_removed = KTipsRemoval(A, degs1, ktip_threshold, tu);
+            std::ostringstream oss;
+            oss << "GetRead2Contigs :: Found " << ktip_edges_removed  << " k-tip edges\n";
+            tu.print_str(oss.str());
+        } while (ktip_edges_removed > 0);
+
+        tu.print_str("GetRead2Contigs :: Removed k-tips\n");
+    }
+
+    if (prune_bridges)
+    {
+        IType bridge_vertices_removed = RemoveBridgeVertices(A);
         std::ostringstream oss;
-        oss << "GetRead2Contigs :: Found " << ktip_edges_removed  << " k-tip edges\n";
+        oss << "GetRead2Contigs :: Removed " << bridge_vertices_removed << " bridge vertices\n";
         tu.print_str(oss.str());
-    } while (ktip_edges_removed > 0);
-
-    tu.print_str("GetRead2Contigs :: Removed k-tips\n");
-
-    IType bridge_vertices_removed = RemoveBridgeVertices(A);
-    std::ostringstream oss;
-    oss << "GetRead2Contigs :: Removed " << bridge_vertices_removed << " bridge vertices\n";
-    tu.print_str(oss.str());
+    }
 
     D2 = A;
     D2.Reduce(degs2, Row, std::plus<IType>(), static_cast<IType>(0));
@@ -823,10 +832,10 @@ std::vector<std::string> LocalAssembly(SpCCols<IType,ReadOverlap>& ContigChains,
     int myrank;
     MPI_Comm_rank(di.world, &myrank);
 
-    std::ofstream contiglog;
-    std::stringstream contiglog_name;
-    contiglog_name << "contiglog_rank" << myrank << ".txt";
-    contiglog.open(contiglog_name.str());
+    // std::ofstream contiglog;
+    // std::stringstream contiglog_name;
+    // contiglog_name << "contiglog_rank" << myrank << ".txt";
+    // contiglog.open(contiglog_name.str());
 
     /* local fasta buffer for sequences already on my processor */
     const char *lfd_buffer = di.lfd->buffer();
@@ -909,7 +918,7 @@ std::vector<std::string> LocalAssembly(SpCCols<IType,ReadOverlap>& ContigChains,
             IType seq_end   = std::get<1>(contig_vector[i]);
             IType idx       = std::get<2>(contig_vector[i]);
 
-            contiglog << myrank << "\t" << contig_id << "\t" << i << "\t" << idx << "\t" << seq_start << "\t" << seq_end << std::endl;
+            // contiglog << myrank << "\t" << contig_id << "\t" << i << "\t" << idx << "\t" << seq_start << "\t" << seq_end << std::endl;
 
             auto segment_info_itr = charbuf_info.find(idx);
             uint64_t read_offset, end_offset;
@@ -928,7 +937,7 @@ std::vector<std::string> LocalAssembly(SpCCols<IType,ReadOverlap>& ContigChains,
         contig_id++;
     }
 
-    contiglog.close();
+    // contiglog.close();
 
     delete [] visited;
 
